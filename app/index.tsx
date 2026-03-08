@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { useHealthData } from '@/context/HealthDataContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +10,12 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 export default function Dashboard() {
     const router = useRouter();
     const { colors: theme } = useTheme();
+    const { medications, vitals, profile } = useHealthData();
+
+    // Calculate dynamic stats
+    const activeMedsCount = medications.length;
+    const vitalsCount = vitals.length;
+    const profileStatus = (profile?.name && profile?.age && profile?.gender) ? 'Complete' : 'Incomplete';
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
@@ -79,22 +86,28 @@ export default function Dashboard() {
                     entering={FadeInDown.delay(500).duration(500)}
                 >
                     {/* Active Meds */}
-                    <View style={[styles.statCard, { backgroundColor: theme.card, borderLeftColor: '#42A5F5' }]}>
+                    <TouchableOpacity
+                        style={[styles.statCard, { backgroundColor: theme.card, borderLeftColor: '#42A5F5' }]}
+                        onPress={() => router.push('/medications')}
+                    >
                         <Text style={[styles.statLabel, { color: theme.icon }]}>Active Meds</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                            <Text style={[styles.statValue, { color: theme.text }]}>0</Text>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{activeMedsCount}</Text>
                             <Ionicons name="medkit-outline" size={24} color="#42A5F5" />
                         </View>
-                    </View>
+                    </TouchableOpacity>
 
                     {/* Vitals Recorded */}
-                    <View style={[styles.statCard, { backgroundColor: theme.card, borderLeftColor: '#26A69A' }]}>
+                    <TouchableOpacity
+                        style={[styles.statCard, { backgroundColor: theme.card, borderLeftColor: '#26A69A' }]}
+                        onPress={() => router.push('/vitals')}
+                    >
                         <Text style={[styles.statLabel, { color: theme.icon }]}>Vitals Recorded</Text>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                            <Text style={[styles.statValue, { color: theme.text }]}>3</Text>
+                            <Text style={[styles.statValue, { color: theme.text }]}>{vitalsCount}</Text>
                             <Ionicons name="pulse" size={24} color="#26A69A" />
                         </View>
-                    </View>
+                    </TouchableOpacity>
 
                     {/* Profile Status */}
                     <View style={[styles.statCard, { backgroundColor: theme.card, borderLeftColor: '#5C6BC0' }]}>
