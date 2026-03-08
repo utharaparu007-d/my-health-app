@@ -1,0 +1,460 @@
+import { Colors } from '@/constants/Colors';
+import { useHealthData, UserProfile } from '@/context/HealthDataContext';
+import { useTheme } from '@/context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+export default function ProfileScreen() {
+    const { colors: theme, theme: currentThemeMode, toggleTheme } = useTheme();
+    const isDark = currentThemeMode === 'dark';
+    const router = useRouter();
+
+    // Connect to global health context
+    const { profile, updateProfile, medications } = useHealthData();
+
+    // Form state (initialize with empty strings, populate later)
+    const [age, setAge] = useState('');
+    const [gender, setGender] = useState('');
+    const [bloodType, setBloodType] = useState('');
+    const [height, setHeight] = useState('');
+    const [weight, setWeight] = useState('');
+    const [medicalConditions, setMedicalConditions] = useState('');
+    const [allergies, setAllergies] = useState('');
+    const [emergencyContact, setEmergencyContact] = useState('');
+
+    const [medicalHistoryVisible, setMedicalHistoryVisible] = useState(false);
+
+    // Pre-fill form when profile context loaded
+    useEffect(() => {
+        if (profile) {
+            setAge(profile.age || '');
+            setGender(profile.gender || '');
+            setBloodType(profile.bloodType || '');
+            setHeight(profile.height || '');
+            setWeight(profile.weight || '');
+            setMedicalConditions(profile.medicalConditions || '');
+            setAllergies(profile.allergies || '');
+            setEmergencyContact(profile.emergencyContact || '');
+        }
+    }, [profile]);
+
+    const handleSaveProfile = async () => {
+        const updatedProfile: UserProfile = {
+            id: 'user_profile', // Constant ID
+            name: profile?.name || 'Demo User',
+            email: profile?.email || 'user@example.com',
+            age: age.trim(),
+            gender: gender.trim(),
+            bloodType: bloodType.trim(),
+            height: height.trim(),
+            weight: weight.trim(),
+            medicalConditions: medicalConditions.trim(),
+            allergies: allergies.trim(),
+            emergencyContact: emergencyContact.trim(),
+        };
+
+        if (Platform.OS === 'web') {
+            window.alert('Profile changes saved successfully!');
+        } else {
+            Alert.alert('Success', 'Profile changes saved successfully!');
+        }
+
+        await updateProfile(updatedProfile);
+    };
+
+    const handleLogout = () => {
+        if (Platform.OS === 'web') {
+            window.alert('Logged out from current session.');
+        } else {
+            Alert.alert('Logged Out', 'You have been logged out.');
+        }
+    };
+
+    const handlePrivacy = () => {
+        if (Platform.OS === 'web') {
+            window.alert('Privacy & Security: All your data is stored locally on this device in a SQLite Database. We do not transmit health records.');
+        } else {
+            Alert.alert('Privacy & Security', 'All your data is stored locally on this device in a SQLite Database. We do not transmit health records.');
+        }
+    };
+
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <ScrollView contentContainerStyle={styles.content}>
+
+                {/* Main Content Area analogous to the image */}
+                <View style={[styles.detailsCard, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.cardTitle, { color: theme.text }]}>Health Details</Text>
+                    <Text style={[styles.cardSubtitle, { color: theme.icon }]}>This information is used to personalize your health insights.</Text>
+
+                    <View style={styles.gridRow}>
+                        <View style={styles.gridItem}>
+                            <Text style={[styles.label, { color: theme.text }]}>Age</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                                placeholderTextColor={theme.icon}
+                                value={age}
+                                onChangeText={setAge}
+                                keyboardType="numeric"
+                            />
+                        </View>
+                        <View style={styles.gridItem}>
+                            <Text style={[styles.label, { color: theme.text }]}>Gender</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                                placeholder="Select gender"
+                                placeholderTextColor={theme.icon}
+                                value={gender}
+                                onChangeText={setGender}
+                            />
+                        </View>
+                        <View style={styles.gridItem}>
+                            <Text style={[styles.label, { color: theme.text }]}>Blood Type</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                                placeholder="Select blood type"
+                                placeholderTextColor={theme.icon}
+                                value={bloodType}
+                                onChangeText={setBloodType}
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.gridRow}>
+                        <View style={styles.gridItemHalf}>
+                            <Text style={[styles.label, { color: theme.text }]}>Height</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                                placeholder="e.g. 180cm"
+                                placeholderTextColor={theme.icon}
+                                value={height}
+                                onChangeText={setHeight}
+                            />
+                        </View>
+                        <View style={styles.gridItemHalf}>
+                            <Text style={[styles.label, { color: theme.text }]}>Weight</Text>
+                            <TextInput
+                                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                                placeholder="e.g. 75kg"
+                                placeholderTextColor={theme.icon}
+                                value={weight}
+                                onChangeText={setWeight}
+                            />
+                        </View>
+                    </View>
+
+                    <Text style={[styles.label, { color: theme.text }]}>Medical Conditions (Comma separated)</Text>
+                    <TextInput
+                        style={[styles.textArea, { color: theme.text, borderColor: theme.border }]}
+                        placeholder="e.g. Asthma, Hypertension"
+                        placeholderTextColor={theme.icon}
+                        value={medicalConditions}
+                        onChangeText={setMedicalConditions}
+                        multiline
+                        numberOfLines={3}
+                    />
+
+                    <Text style={[styles.label, { color: theme.text }]}>Allergies (Comma separated)</Text>
+                    <TextInput
+                        style={[styles.textArea, { color: theme.text, borderColor: theme.border }]}
+                        placeholder="e.g. Peanuts, Penicillin"
+                        placeholderTextColor={theme.icon}
+                        value={allergies}
+                        onChangeText={setAllergies}
+                        multiline
+                        numberOfLines={3}
+                    />
+
+                    <Text style={[styles.label, { color: theme.text }]}>Emergency Contact</Text>
+                    <TextInput
+                        style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                        placeholder="Name and Phone Number"
+                        placeholderTextColor={theme.icon}
+                        value={emergencyContact}
+                        onChangeText={setEmergencyContact}
+                    />
+
+                    <View style={styles.buttonContainer}>
+                        <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={handleSaveProfile}>
+                            <Ionicons name="save-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                            <Text style={styles.saveButtonText}>Save Changes</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Settings Sections */}
+                <View style={[styles.section, { marginTop: 24 }]}>
+                    <Text style={[styles.sectionTitle, { color: theme.icon }]}>Preferences</Text>
+
+                    <View style={[styles.row, { backgroundColor: theme.card }]}>
+                        <View style={styles.rowLeft}>
+                            <Ionicons name="moon-outline" size={22} color={theme.text} />
+                            <Text style={[styles.rowLabel, { color: theme.text }]}>Dark Mode</Text>
+                        </View>
+                        <Switch value={isDark} onValueChange={toggleTheme} />
+                    </View>
+
+                    <TouchableOpacity style={[styles.row, { backgroundColor: theme.card }]} onPress={() => {
+                        const message = 'Notifications are currently active for the medication reminder loop.';
+                        Platform.OS === 'web' ? window.alert(message) : Alert.alert('Notifications', message);
+                    }}>
+                        <View style={styles.rowLeft}>
+                            <Ionicons name="notifications-outline" size={22} color={theme.text} />
+                            <Text style={[styles.rowLabel, { color: theme.text }]}>Notifications</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={theme.icon} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: theme.icon }]}>Account</Text>
+
+                    <View style={styles.sectionHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.sectionTitle, { color: theme.icon, marginBottom: 0 }]}>Medical History (Active)</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                            <TouchableOpacity onPress={() => setMedicalHistoryVisible(true)}>
+                                <Text style={{ color: theme.primary, fontWeight: '600' }}>View All</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {medications.length > 0 ? (
+                        medications.slice(0, 3).map((med) => (
+                            <View key={med.id} style={[styles.row, { backgroundColor: theme.card, marginBottom: 8 }]}>
+                                <View style={styles.rowLeft}>
+                                    <View style={[styles.medIconContainer, { backgroundColor: `rgba(0,122,255,0.1)` }]}>
+                                        <Text style={{ fontSize: 18 }}>{med.icon}</Text>
+                                    </View>
+                                    <View>
+                                        <Text style={[styles.rowLabel, { color: theme.text, fontWeight: 'bold' }]}>{med.name}</Text>
+                                        <Text style={{ color: theme.icon, fontSize: 12 }}>{med.dosage} - {med.frequency}</Text>
+                                    </View>
+                                </View>
+                                <Ionicons name="medical-outline" size={20} color={theme.icon} />
+                            </View>
+                        ))
+                    ) : (
+                        <View style={[styles.row, { backgroundColor: theme.card, justifyContent: 'center' }]}>
+                            <Text style={{ color: theme.icon }}>No active medications found.</Text>
+                        </View>
+                    )}
+
+                    <View style={[styles.section, { marginTop: 12, paddingHorizontal: 0 }]}>
+                        <TouchableOpacity style={[styles.row, { backgroundColor: theme.card }]} onPress={handlePrivacy}>
+                            <View style={styles.rowLeft}>
+                                <Ionicons name="shield-checkmark-outline" size={22} color={theme.text} />
+                                <Text style={[styles.rowLabel, { color: theme.text }]}>Privacy & Security</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={theme.icon} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.row, { backgroundColor: theme.card }]} onPress={handleLogout}>
+                            <View style={styles.rowLeft}>
+                                <Ionicons name="log-out-outline" size={22} color={Colors.light.danger} />
+                                <Text style={[styles.rowLabel, { color: Colors.light.danger }]}>Log Out</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+            </ScrollView>
+
+            {/* Medical History Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={medicalHistoryVisible}
+                onRequestClose={() => setMedicalHistoryVisible(false)}
+            >
+                <View style={[styles.modalOverlay, { paddingTop: 60 }]}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.card, flex: 1, maxHeight: '90%' }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                            <Text style={[styles.modalTitle, { color: theme.text, marginBottom: 0 }]}>Full Medical History</Text>
+                            <TouchableOpacity onPress={() => setMedicalHistoryVisible(false)}>
+                                <Ionicons name="close-circle-outline" size={28} color={theme.icon} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.row, { backgroundColor: theme.primary, justifyContent: 'center', paddingVertical: 12, marginBottom: 20 }]}
+                            onPress={() => {
+                                setMedicalHistoryVisible(false);
+                                router.push('/medications');
+                            }}
+                        >
+                            <Ionicons name="add-circle-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
+                            <Text style={[styles.rowLabel, { color: '#fff', fontWeight: 'bold' }]}>Enter New / Previous Record</Text>
+                        </TouchableOpacity>
+
+                        <Text style={[styles.sectionTitle, { color: theme.icon, marginBottom: 12, marginLeft: 0 }]}>Your Active Medications</Text>
+
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {medications.length > 0 ? (
+                                medications.map((med) => (
+                                    <View key={med.id} style={[styles.row, { backgroundColor: theme.background, marginBottom: 12, borderColor: theme.border, borderWidth: 1 }]}>
+                                        <View style={styles.rowLeft}>
+                                            <View style={[styles.medIconContainer, { backgroundColor: `rgba(0,122,255,0.1)` }]}>
+                                                <Text style={{ fontSize: 18 }}>{med.icon}</Text>
+                                            </View>
+                                            <View>
+                                                <Text style={[styles.rowLabel, { color: theme.text, fontWeight: 'bold' }]}>{med.name}</Text>
+                                                <Text style={{ color: theme.icon, fontSize: 12 }}>{med.dosage} - {med.frequency}</Text>
+                                                <Text style={{ color: theme.icon, fontSize: 12 }}>Supply: {med.supply} left</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))
+                            ) : (
+                                <Text style={{ color: theme.icon, textAlign: 'center', marginTop: 10 }}>No medical records found.</Text>
+                            )}
+                        </ScrollView>
+
+                        <TouchableOpacity
+                            style={[styles.saveButton, { backgroundColor: theme.card, marginTop: 16, borderColor: theme.border, borderWidth: 1 }]}
+                            onPress={() => {
+                                setMedicalHistoryVisible(false);
+                                router.push('/medications');
+                            }}
+                        >
+                            <Text style={[styles.saveButtonText, { color: theme.text }]}>Manage All Records</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    content: {
+        paddingBottom: 40,
+        paddingTop: 20,
+    },
+    detailsCard: {
+        borderRadius: 12,
+        padding: 24,
+        marginHorizontal: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+    },
+    cardTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        marginBottom: 8,
+    },
+    cardSubtitle: {
+        fontSize: 14,
+        marginBottom: 24,
+    },
+    gridRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginHorizontal: -8,
+        marginBottom: 16,
+    },
+    gridItem: {
+        flex: 1,
+        minWidth: '30%',
+        paddingHorizontal: 8,
+    },
+    gridItemHalf: {
+        flex: 1,
+        minWidth: '45%',
+        paddingHorizontal: 8,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 8,
+        marginTop: 8,
+    },
+    input: {
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 14,
+        fontSize: 14,
+        backgroundColor: 'transparent',
+    },
+    textArea: {
+        borderWidth: 1,
+        borderRadius: 8,
+        padding: 14,
+        fontSize: 14,
+        minHeight: 80,
+        textAlignVertical: 'top',
+        marginBottom: 16,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 24,
+    },
+    saveButton: {
+        flexDirection: 'row',
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+
+    // Bottom sections styles
+    section: {
+        paddingHorizontal: 20,
+        marginBottom: 10,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 10,
+        marginLeft: 10,
+        textTransform: 'uppercase',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+        paddingHorizontal: 10,
+    },
+    medIconContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 10,
+    },
+    rowLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    rowLabel: {
+        fontSize: 16,
+    },
+    // Modal Styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '85%' },
+    modalTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
+});

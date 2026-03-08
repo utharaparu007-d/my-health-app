@@ -1,0 +1,393 @@
+import { Colors } from '@/constants/Colors';
+import { findMedicalResponse } from '@/constants/MedicalKnowledge';
+import { Medication, useHealthData } from '@/context/HealthDataContext';
+import { useTheme } from '@/context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+
+type Message = {
+    id: string;
+    text: string;
+    sender: 'user' | 'ai';
+    timestamp: Date;
+};
+
+export default function ChatbotScreen() {
+    const { colors: theme } = useTheme();
+    const { medications, vitals, symptoms } = useHealthData();
+
+    // Generate personalized greeting based on time of day
+    const getPersonalizedGreeting = () => {
+        const hour = new Date().getHours();
+        let greeting = '';
+
+        if (hour < 12) {
+            greeting = 'Good morning! ☀️';
+        } else if (hour < 17) {
+            greeting = 'Good afternoon! 🌤️';
+        } else {
+            greeting = 'Good evening! 🌙';
+        }
+
+        return `${greeting} I'm your personal health assistant. How can I help you today?`;
+    };
+
+    const [messages, setMessages] = useState<Message[]>([
+        {
+            id: '1',
+            text: getPersonalizedGreeting(),
+            sender: 'ai',
+            timestamp: new Date(),
+        },
+    ]);
+    const [inputText, setInputText] = useState('');
+    const flatListRef = useRef<FlatList>(null);
+
+    const sendMessage = () => {
+        if (inputText.trim() === '') return;
+
+        const userMessage: Message = {
+            id: Date.now().toString(),
+            text: inputText,
+            sender: 'user',
+            timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, userMessage]);
+        setInputText('');
+
+        // Generate AI Response (Now Async)
+        setTimeout(async () => {
+            // Show "typing" placeholder could be added here, but for now we just wait
+            const responseText = await generateResponse(userMessage.text);
+            const aiMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                text: responseText,
+                sender: 'ai',
+                timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, aiMessage]);
+        }, 500);
+    };
+
+    const fetchWikipediaSummary = async (query: string): Promise<string | null> => {
+        try {
+            // 1. Clean the query to remove common conversational fillers
+            const cleanQuery = query
+                .replace(/what is|what are|who is|who are|tell me about|can you search|search for|explain/gi, '')
+                .replace(/[?.,!]/g, '') // remove punctuation
+                .trim();
+
+            if (!cleanQuery) return null;
+
+            console.log("Searching Wiki for:", cleanQuery);
+
+            // 2. Step 1: Search for the best matching page title (Opensearch)
+            // This handles typos and fuzzy matching (e.g. "lung calcer" -> "Lung cancer")
+            const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(cleanQuery)}&limit=1&namespace=0&format=json&origin=*`;
+            const searchResponse = await fetch(searchUrl);
+            const searchData = await searchResponse.json();
+
+            // Opensearch returns [query, [titles], [descriptions], [urls]]
+            const bestTitle = searchData[1][0];
+
+            if (!bestTitle) {
+                console.log("No Wiki page found for:", cleanQuery);
+                return null;
+            }
+
+            console.log("Found Wiki Title:", bestTitle);
+
+            // 3. Step 2: Fetch the summary for the specific page title
+            const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(bestTitle)}`;
+            const summaryResponse = await fetch(summaryUrl);
+
+            if (!summaryResponse.ok) return null;
+
+            const data = await summaryResponse.json();
+            if (data.type === 'standard' && data.extract) {
+                return `**${data.title}**\n${data.extract}\n\n🔗 Read more: ${data.content_urls.desktop.page}`;
+            } else if (data.type === 'disambiguation') {
+                return `The term "${bestTitle}" refers to multiple things. Please be more specific.`;
+            }
+
+            return null;
+        } catch (error) {
+            console.error("Wiki Error:", error);
+            return null;
+        }
+    };
+
+    const generateResponse = async (query: string): Promise<string> => {
+        const lowerQuery = query.toLowerCase();
+
+        // 1. Symptom & Vital Synthesis (Concise Analysis)
+        if ((lowerQuery.includes('symptom') || lowerQuery.includes('feeling') || lowerQuery.includes('headache') || lowerQuery.includes('dizzy')) &&
+            (lowerQuery.includes('vital') || lowerQuery.includes('pressure') || lowerQuery.includes('heart') || lowerQuery.includes('rate'))) {
+
+            // Getting most recent vital
+            if (vitals.length === 0) return "Please log your vitals first so I can analyze them with your symptoms.";
+            const latestVital = vitals[0];
+            const vitalValue = parseFloat(latestVital.value.split('/')[0]); // simplified parsing
+            const isHigh = vitalValue > 120; // simplified threshold for demo
+
+            // Construct research query
+            const symptomKeyword = lowerQuery.includes('headache') ? 'headache' : lowerQuery.includes('dizzy') ? 'dizziness' : 'symptoms';
+            const researchQuery = `${symptomKeyword} and high ${latestVital.type}`;
+
+            const wikiSummary = await fetchWikipediaSummary(researchQuery);
+            const wikiSnippet = wikiSummary ? wikiSummary.split('.')[0] + '.' : "Research suggests a link.";
+
+            // Concise 50-word synthesis
+            return `Your ${latestVital.type} is ${latestVital.value} (${isHigh ? 'High' : 'Normal'}). ${wikiSnippet} This combination can indicate strain or an underlying condition. Recommendation: Rest immediately, monitor your ${latestVital.type}, and consult a doctor if it persists. (Source: Wikipedia/Local)`;
+        }
+
+        // 2. Personal Data Checks (Standard)
+        if (lowerQuery.includes('medication') || lowerQuery.includes('medicine') || lowerQuery.includes('pills')) {
+            if (medications.length === 0) return "You don't have any medications logged. It's good practice to keep a record of any supplements or prescriptions for your doctor.";
+            const medList = medications.map((m: Medication) => `${m.name} (${m.dosage})`).join(', ');
+
+            // Try to find general info about the first med
+            const firstMedName = medications[0].name.toLowerCase();
+            const match = findMedicalResponse(firstMedName);
+
+            let response = `You are currently taking: ${medList}.`;
+            if (match) {
+                // Shorten info for conciseness
+                const shortInfo = match.info.split('.')[0] + '.';
+                response += `\n\nInfo: ${shortInfo}`;
+            }
+            return response;
+        }
+
+        if (lowerQuery.includes('symptom') || lowerQuery.includes('feeling')) {
+            if (symptoms.length === 0) return "You haven't logged any symptoms recently.";
+            const recent = symptoms[0];
+            const match = findMedicalResponse(recent.type.toLowerCase());
+
+            let response = `Last symptom: ${recent.type} (${recent.severity}) on ${recent.date}.`;
+            if (match) {
+                response += `\n\nRec: ${match.recommendation || "Monitor closely."}`;
+            }
+            return response;
+        }
+
+        if (lowerQuery.includes('vital') || lowerQuery.includes('heart') || lowerQuery.includes('pressure')) {
+            if (vitals.length === 0) return "No vitals recorded yet.";
+            const latest = vitals[0];
+            const match = findMedicalResponse(latest.type.toLowerCase());
+
+            let response = `Latest vital: ${latest.type}: ${latest.value} (${latest.date}).`;
+            if (match) {
+                // Concise note
+                const note = match.info.split('.')[0] + '.';
+                response += `\n\nNote: ${note}`;
+            }
+            return response;
+        }
+
+        // 2. Medical Knowledge Base Check (Smart Match)
+        const match = findMedicalResponse(query);
+        if (match) {
+            let response = match.info;
+            if (match.recommendation) {
+                response += `\n\n💡 Recommendation: ${match.recommendation}`;
+            }
+            return response;
+        }
+
+        // 4. Conversational Intelligence & Emotional Awareness
+
+        // Greetings with context
+        const greetingWords = ['hello', 'hi', 'hey', 'greetings', 'morning', 'afternoon', 'evening'];
+        const isGreeting = greetingWords.some(word => lowerQuery === word || lowerQuery.startsWith(`${word} `) || lowerQuery.endsWith(` ${word}`));
+
+        if (isGreeting) {
+            const hour = new Date().getHours();
+            let timeGreeting = '';
+
+            if (hour < 12) timeGreeting = 'Good morning';
+            else if (hour < 17) timeGreeting = 'Good afternoon';
+            else timeGreeting = 'Good evening';
+
+            return `${timeGreeting}! 👋 I'm here to help you. I can answer medical questions, check your health data, or help you find general information. What's on your mind?`;
+        }
+
+        // Gratitude responses (warm and encouraging)
+        if (lowerQuery.includes('thank') || lowerQuery.includes('thanks') || lowerQuery.includes('appreciate')) {
+            const responses = [
+                "You're very welcome! I'm always here to help. 😊",
+                "Happy to help! Feel free to ask me anything else. 💙",
+                "My pleasure! Don't hesitate to reach out if you need anything else. 🌟"
+            ];
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+
+        // How are you / small talk
+        if (lowerQuery.includes('how are you') || lowerQuery.includes('how r u')) {
+            return "I'm functioning perfectly, thank you for asking! 😊 How are YOU feeling today? Is there anything I can help you with?";
+        }
+
+        // Goodbye
+        if (lowerQuery.includes('bye') || lowerQuery.includes('goodbye') || lowerQuery.includes('see you')) {
+            return "Take care! 👋 I'll be here whenever you need information or advice. Have a great day!";
+        }
+
+        // 5. 🌐 ONLINE SEARCH (Wikipedia General Fallback)
+        // If it wasn't a recognized command, medical query, or small talk, let's try a general search
+        const wikiResult = await fetchWikipediaSummary(query);
+        if (wikiResult) {
+            return `🌐 Here's what I found:\n\n${wikiResult}`;
+        }
+
+        return "I couldn't find a precise match for that in my local knowledge base or online sources.\n\nCould you try rephrasing your question or being more specific? I'm here to help! 😊";
+    };
+
+    useEffect(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+    }, [messages]);
+
+    const renderItem = ({ item }: { item: Message }) => {
+        const isUser = item.sender === 'user';
+        return (
+            <View style={[
+                styles.messageBubble,
+                isUser ? styles.userBubble : [styles.aiBubble, { backgroundColor: theme.card, borderColor: theme.border }]
+            ]}>
+                <Text style={[
+                    styles.messageText,
+                    isUser ? styles.userText : [styles.aiText, { color: theme.text }]
+                ]}>
+                    {item.text}
+                </Text>
+                <Text style={[
+                    styles.timestamp,
+                    isUser ? styles.userTimestamp : [styles.aiTimestamp, { color: theme.icon }]
+                ]}>
+                    {item.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+            </View>
+        );
+    };
+
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <KeyboardAvoidingView
+                style={styles.keyboardAvoidingView}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={100}
+            >
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.listContent}
+                    style={styles.list}
+                    ListEmptyComponent={null}
+                />
+
+                <View style={[styles.inputContainer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: theme.card, color: theme.text }]}
+                        placeholder="Type a health question..."
+                        placeholderTextColor={theme.icon}
+                        value={inputText}
+                        onChangeText={setInputText}
+                        onSubmitEditing={sendMessage}
+                    />
+                    <TouchableOpacity style={[styles.sendButton, { backgroundColor: theme.primary }]} onPress={sendMessage}>
+                        <Ionicons name="send" size={20} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    keyboardAvoidingView: {
+        flex: 1,
+    },
+    list: {
+        flex: 1,
+    },
+    listContent: {
+        padding: 16,
+        paddingBottom: 20,
+    },
+    messageBubble: {
+        maxWidth: '80%',
+        padding: 12,
+        borderRadius: 16,
+        marginBottom: 12,
+    },
+    userBubble: {
+        alignSelf: 'flex-end',
+        backgroundColor: Colors.light.primary,
+        borderBottomRightRadius: 4,
+    },
+    aiBubble: {
+        alignSelf: 'flex-start',
+        borderBottomLeftRadius: 4,
+        borderWidth: 1,
+    },
+    messageText: {
+        fontSize: 15,
+        lineHeight: 20,
+    },
+    userText: {
+        color: '#fff',
+    },
+    aiText: {
+        // dynamic color
+    },
+    timestamp: {
+        fontSize: 10,
+        marginTop: 4,
+    },
+    userTimestamp: {
+        color: 'rgba(255,255,255,0.7)',
+        alignSelf: 'flex-end',
+    },
+    aiTimestamp: {
+        alignSelf: 'flex-start',
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+        paddingBottom: Platform.OS === 'ios' ? 0 : 10,
+        borderTopWidth: 1,
+    },
+    input: {
+        flex: 1,
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        marginRight: 10,
+        fontSize: 15,
+        maxHeight: 100,
+    },
+    sendButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+});
