@@ -212,59 +212,50 @@ ${JSON.stringify(diseaseData)}
         return context;
     };
 
-    const fetchGeminiResponse = async (systemPrompt: string, userQuery: string, conversationHistory: Message[]): Promise<string | null> => {
-        const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    const fetchGroqResponse = async (systemPrompt: string, userQuery: string, conversationHistory: Message[]): Promise<string | null> => {
+        const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
         if (!apiKey || apiKey === 'your_api_key_here') {
-            console.log("No Gemini API key found, falling back to rule-based engine.");
+            console.log("No Groq API key found.");
             return null;
         }
 
         try {
-            // Build multi-turn conversation so Gemini remembers context
+            // Build multi-turn conversation so Groq remembers context
             let history = conversationHistory.slice(-6).map(msg => ({
-                role: msg.sender === 'user' ? 'user' : 'model',
-                parts: [{ text: msg.text }]
+                role: msg.sender === 'user' ? 'user' : 'assistant',
+                content: msg.text
             }));
 
-            // Gemini API strictly requires that the first message in the history is from the 'user'
-            if (history.length > 0 && history[0].role === 'model') {
-                history.shift();
-            }
-
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+            const url = `https://api.groq.com/openai/v1/chat/completions`;
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
                 body: JSON.stringify({
-                    system_instruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    contents: [
+                    model: 'llama-3.1-8b-instant',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
                         ...history,
-                        // Append the latest user query
-                        { role: 'user', parts: [{ text: userQuery }] }
+                        { role: 'user', content: userQuery }
                     ],
-                    generationConfig: {
-                        temperature: 0.75,
-                        maxOutputTokens: 2000,
-                        topP: 0.9,
-                    }
+                    temperature: 0.75,
+                    max_tokens: 2000,
+                    top_p: 0.9,
                 })
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error("Gemini API Error:", response.status, errorData);
+                console.error("Groq API Error:", response.status, errorData);
                 return null;
             }
 
             const data = await response.json();
-            // Gemini 3 Flash returns an array of parts that may include thought signatures. We strictly want the inner part that has a text field.
-            const parts = data.candidates?.[0]?.content?.parts || [];
-            const textPart = parts.find((p: any) => p.text);
-            return textPart ? textPart.text.trim() : null;
+            return data.choices?.[0]?.message?.content?.trim() || null;
         } catch (error) {
-            console.error('Gemini Fetch Error:', error);
+            console.error('Groq Fetch Error:', error);
             return null;
         }
     };
@@ -273,17 +264,17 @@ ${JSON.stringify(diseaseData)}
         const lowerQuery = query.toLowerCase();
         const userName = profile?.name?.split(' ')[0] || '';
 
-        // --- STEP 1: Try Gemini with full conversation history and rich context ---
+        // --- STEP 1: Try Groq with full conversation history and rich context ---
         try {
             const mlContext = buildSystemContext();
-            const mlResponse = await fetchGeminiResponse(mlContext, query, messages);
+            const mlResponse = await fetchGroqResponse(mlContext, query, messages);
             if (mlResponse) {
                 return mlResponse;
             } else {
-                return "TEST_ERROR: Received a null or undefined response from Gemini API!";
+                return "TEST_ERROR: Received a null or undefined response from Groq API!";
             }
         } catch (e: any) {
-            return "TEST_ERROR: Network or Parsing Exception inside fetchGeminiResponse: " + e.message;
+            return "TEST_ERROR: Network or Parsing Exception inside fetchGroqResponse: " + e.message;
         }
 
     };
